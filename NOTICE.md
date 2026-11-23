@@ -26,7 +26,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER I
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Nothing of that film's story, characters or marks is used here: the Keeper, the Reason mark, the corgis, the shots and
-the score are not in this folder.
+the score are not in this repository.
 
 ## Libraries
 
@@ -34,7 +34,9 @@ the score are not in this folder.
 
 `vendor/mp4-muxer.js` is mp4-muxer 5.2.2 (https://github.com/Vanilagy/mp4-muxer), MIT License, Copyright (c) 2023 Vanilagy.
 
-Both are the minified builds packed in `tide-keeper-sf.html`; their full licence texts are beside them in that file.
+Both are the minified builds packed in `tide-keeper-sf.html` (in the repository named above), unchanged. Both are
+under the MIT License: the permission notice and the warranty disclaimer printed in full in the section above apply to
+each of them, with its own copyright line as given here.
 
 ## Typefaces
 
