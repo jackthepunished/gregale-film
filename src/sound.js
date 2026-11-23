@@ -1,5 +1,5 @@
-// The soundtrack, synthesised in code: no samples, no network. renderScore(night) -> { l, r } (Float32Array, 44.1 kHz),
-// as long as the cut it is for.
+// The soundtrack, synthesised in code: no samples, no network. renderScore(cut) -> { l, r } (Float32Array, 44.1 kHz),
+// as long as the cut it is for (a cut of timeline.js: 'night', 'full', 'nightSlow', 'fullSlow'), and in time with it.
 //
 // In D major, gentle and sparse. Shot by shot:
 //   s01   wind arriving over quiet water                 s02   Dadd9, the boat's tune on a small bell
@@ -14,7 +14,7 @@
 //   s10   G under the terminal (a tick a letter, a chime for the address), D as the name comes up
 // The night film adds crickets on every surface shot, a music-box tone for the tune, and birds as the light comes.
 // Everything musical is data, placed by shot (see chords(), melody(), cues()). Deterministic: seeded PRNGs only.
-import { starts, total } from './timeline.js';
+import { clock, total, CUTS } from './timeline.js';
 
 const SR = 44100, FPS = 24;
 let N = 0, DUR = 0;   // set by renderScore for the cut being rendered
@@ -22,26 +22,26 @@ const sec = (frame) => frame / FPS;
 
 const chords = (S, night) => [   // [start s, notes, gain]
   [2.0, ['D3', 'A3', 'E4'], 0.5],
-  [sec(S.s02), ['D3', 'A3', 'E4', 'F#4'], 1],
-  [sec(S.s03), ['B2', 'F#3', 'A3', 'D4'], 1],
-  [sec(S.s03b), ['B2', 'F3', 'A3', 'D4'], 0.95],
-  [sec(S.s04), ['G2', 'D3', 'F#3', 'B3'], 1],
-  [sec(S.s05), ['E2', 'B2', 'D3', 'F#3'], 0.95],
-  [sec(S.s05b), ['C3', 'G3', 'B3', 'E4'], 0.9],
-  [sec(S.s06), ['A1', 'E2', 'B2', 'D3'], 0.95],
-  [sec(S.s11), ['F#2', 'C#3', 'E3', 'A3'], 1],
-  [sec(S.s11 + 44), ['F#2', 'C3', 'E3', 'A3'], 0.9],
-  [sec(S.s11 + 96), ['A2', 'E3', 'A3', 'C#4'], 1],
-  [sec(S.s12), ['F#2', 'D3', 'A3', 'D4'], 1],
-  [sec(S.s13), ['B2', 'F#3', 'A3', 'D4'], 0.85],
-  [sec(S.s14), ['G2', 'D3', 'F#3', 'B3'], 0.95],
-  [sec(S.s14 + 72), ['A2', 'E3', 'A3', 'D4'], 1],
-  [sec(S.s09), ['D2', 'A2', 'D3', 'F#3', 'A3', 'E4'], 1.2],
-  [sec(S.s09b), ['B2', 'F#3', 'A3', 'D4'], 0.9], [sec(S.s09b + 84), ['G2', 'D3', 'B3'], 0.6],
-  [sec(S.s10), ['G2', 'D3', 'G3', 'B3', 'D4'], night ? 0.85 : 1.0],
-  [sec(S.s10 + 128), ['D2', 'A2', 'D3', 'F#3', 'A3'], 1.0],
+  [S('s02'), ['D3', 'A3', 'E4', 'F#4'], 1],
+  [S('s03'), ['B2', 'F#3', 'A3', 'D4'], 1],
+  [S('s03b'), ['B2', 'F3', 'A3', 'D4'], 0.95],
+  [S('s04'), ['G2', 'D3', 'F#3', 'B3'], 1],
+  [S('s05'), ['E2', 'B2', 'D3', 'F#3'], 0.95],
+  [S('s05b'), ['C3', 'G3', 'B3', 'E4'], 0.9],
+  [S('s06'), ['A1', 'E2', 'B2', 'D3'], 0.95],
+  [S('s11'), ['F#2', 'C#3', 'E3', 'A3'], 1],
+  [S('s11', 44), ['F#2', 'C3', 'E3', 'A3'], 0.9],
+  [S('s11', 96), ['A2', 'E3', 'A3', 'C#4'], 1],
+  [S('s12'), ['F#2', 'D3', 'A3', 'D4'], 1],
+  [S('s13'), ['B2', 'F#3', 'A3', 'D4'], 0.85],
+  [S('s14'), ['G2', 'D3', 'F#3', 'B3'], 0.95],
+  [S('s14', 72), ['A2', 'E3', 'A3', 'D4'], 1],
+  [S('s09'), ['D2', 'A2', 'D3', 'F#3', 'A3', 'E4'], 1.2],
+  [S('s09b'), ['B2', 'F#3', 'A3', 'D4'], 0.9], [S('s09b', 84), ['G2', 'D3', 'B3'], 0.6],
+  [S('s10'), ['G2', 'D3', 'G3', 'B3', 'D4'], night ? 0.85 : 1.0],
+  [S('s10', 128), ['D2', 'A2', 'D3', 'F#3', 'A3'], 1.0],
 ];
-// The boat's tune: [shot, seconds into it, pitch, velocity]
+// The boat's tune: [shot, seconds into it (as the shot is written: the cut squeezes a phrase to fit its shot), pitch, velocity]
 const melody = (night) => [
   ['s02', 0.3, 'A5', 0.7], ['s02', 1.0, 'F#5', 0.55], ['s02', 1.6, 'E5', 0.5], ['s02', 2.6, 'D5', 0.55], ['s02', 3.3, 'E5', 0.5],
   ['s03', 0.3, 'F#5', 0.55], ['s03', 1.1, 'D5', 0.5], ['s03', 1.9, 'B4', 0.5], ['s03', 3.6, 'A5', 0.55], ['s03', 4.4, 'F#5', 0.48],
@@ -54,22 +54,23 @@ const melody = (night) => [
   ['s10', 0.3, 'B5', 0.5], ['s10', 5.4, 'D6', 0.75], ['s10', 6.3, 'B5', 0.6], ['s10', 7.1, 'A5', 0.55], ['s10', 8.0, 'F#5', 0.5], ['s10', 8.8, 'D5', 0.55],
   ...(night ? [['s10', 9.8, 'A5', 0.4]] : []),
 ];
-// Spot sounds, in film frames (see the shots for what happens then)
+// Spot sounds, in seconds of film. S(shot, f) is when the film shows that shot's own frame f (see the shots for what
+// happens then), so a cue stays on its picture however fast the cut runs the shot.
 const cues = (S, night) => ({
-  beam: S.s03 + 62, caught: S.s03b + 46, turned: S.s03b + 86,
-  spark: S.s04 + 78, allOn: S.s04 + 104, plink: S.s04 + 120,
-  crates: [S.s05 + 44, S.s05 + 63, S.s05 + 68],
-  buckets: [12, 21, 29, 38].map((f) => S.s05b + f), drums: S.s05b + 66,
-  ring: S.s06 + 36, through: S.s06 + 80,
-  hoist: S.s11 + 18, bad: S.s11 + 44, gust: S.s11 + 56, good: S.s11 + 96,
-  branches: [0, 1, 2].map((i) => S.s12 + 8 + i * 24 + 40),
-  visits: [54, 74, 94].map((f) => S.s13 + f),
-  calls: [[26, 0], [46, 2], [62, 1], [80, 3], [96, 0], [108, 2]].map(([f, tool]) => [S.s14 + f, tool]),
-  lanterns: Array.from({ length: 13 }, (_, i) => S.s09 + 14 + Math.round((i / 12) * 96) + 6),
-  out: Array.from({ length: 13 }, (_, i) => S.s09b + 40 + i * 8),
-  // the terminal (s10): the first letter at s10 + 34, two frames a letter, fourteen letters; then its two answers
-  keys: Array.from({ length: 14 }, (_, i) => S.s10 + 34 + i * 2), built: S.s10 + 34 + 28 + 12, live: S.s10 + 34 + 28 + 28,
-  birds: night ? [S.s10 + 150, S.s10 + 171, S.s10 + 178, S.s10 + 204, S.s10 + 226] : [],
+  beam: S('s03', 62), caught: S('s03b', 46), turned: S('s03b', 86),
+  spark: S('s04', 78), allOn: S('s04', 104), plink: S('s04', 120),
+  crates: [44, 63, 68].map((f) => S('s05', f)),
+  buckets: [12, 21, 29, 38].map((f) => S('s05b', f)), drums: S('s05b', 66),
+  ring: S('s06', 36), through: S('s06', 80),
+  hoist: S('s11', 18), bad: S('s11', 44), gust: S('s11', 56), good: S('s11', 96),
+  branches: [0, 1, 2].map((i) => S('s12', 8 + i * 24 + 40)),
+  visits: [54, 74, 94].map((f) => S('s13', f)),
+  calls: [[26, 0], [46, 2], [62, 1], [80, 3], [96, 0], [108, 2]].map(([f, tool]) => [S('s14', f), tool]),
+  lanterns: Array.from({ length: 13 }, (_, i) => S('s09', 14 + Math.round((i / 12) * 96) + 6)),
+  out: Array.from({ length: 13 }, (_, i) => S('s09b', 40 + i * 8)),
+  // the terminal (s10): the first letter at frame 34, two frames a letter, fourteen letters; then its two answers
+  keys: Array.from({ length: 14 }, (_, i) => S('s10', 34 + i * 2)), built: S('s10', 34 + 28 + 12), live: S('s10', 34 + 28 + 28),
+  birds: night ? [150, 171, 178, 204, 226].map((f) => S('s10', f)) : [],
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -110,7 +111,7 @@ function band(x, centre, q) { let lo = 0, bp = 0, f = 0; const out = new Float32
 function wander(seed, rate) { const r = prng(seed), v = Array.from({ length: Math.ceil(DUR * rate) + 3 }, () => r()); return (t) => { const p = t * rate, i = Math.floor(p), u = p - i, s = u * u * (3 - 2 * u); return v[i] * (1 - s) + v[i + 1] * s; }; }
 
 function renderPads(out, S, night, under) {
-  const r = prng(7), tmpL = new Float32Array(N), tmpR = new Float32Array(N), CH = chords(S, night), U1 = sec(S.s11);
+  const r = prng(7), tmpL = new Float32Array(N), tmpR = new Float32Array(N), CH = chords(S, night), U1 = S('s11');
   CH.forEach(([t0, notes, gain], ci) => {
     const t1 = (CH[ci + 1]?.[0] ?? DUR + 3), a = Math.max(0, Math.round((t0 - 0.9) * SR)), b = Math.min(N, Math.round((t1 + 2.4) * SR));
     notes.forEach((name, ni) => {
@@ -127,18 +128,18 @@ function renderPads(out, S, night, under) {
     });
   });
   // brightness: open on the surface (less so at night), closed down under water, opening again as the pedal builds
-  const open = night ? 1050 : 1500, dawn = night ? (t) => 700 * smooth(sec(S.s10 + 110), sec(S.s10 + 230), t) : () => 0;
-  const cut = (t) => 520 + open * (1 - under(t)) * smooth(2, 6, t) + 700 * smooth(sec(S.s06 + 20), sec(S.s06 + 100), t) * under(t) + 500 * smooth(U1, U1 + 1, t) + dawn(t);
+  const open = night ? 1050 : 1500, dawn = night ? (t) => 700 * smooth(S('s10', 110), S('s10', 230), t) : () => 0;
+  const cut = (t) => 520 + open * (1 - under(t)) * smooth(2, 6, t) + 700 * smooth(S('s06', 20), S('s06', 100), t) * under(t) + 500 * smooth(U1, U1 + 1, t) + dawn(t);
   lowpass(tmpL, cut); lowpass(tmpR, cut);
-  const lvl = line([[0, 0], [2, 0], [5, 0.8], [sec(S.s05), 0.85], [sec(S.s05) + 0.3, 0.7], [sec(S.s06), 0.8], [U1, 1.0], [sec(S.s09), 1.1], [sec(S.s10 + 60), 1], [DUR - 0.2, 0]]);
+  const lvl = line([[0, 0], [2, 0], [5, 0.8], [S('s05'), 0.85], [S('s05') + 0.3, 0.7], [S('s06'), 0.8], [U1, 1.0], [S('s09'), 1.1], [S('s10', 60), 1], [DUR - 0.2, 0]]);
   for (let i = 0; i < N; i++) { const g = lvl(i / SR); out.l[i] += tmpL[i] * g; out.r[i] += tmpR[i] * g; }
 }
 
 function renderAir(out, S, night, under) {
-  const U0 = sec(S.s05), U1 = sec(S.s11), END = sec(S.s10);
+  const U0 = S('s05'), U1 = S('s11'), END = S('s10');
   // the gregale: two bands of noise that swell and wander, gone under water (and dropping as the bay empties, at night)
   const gust = wander(11, 0.45), gust2 = wander(12, 0.8);
-  const lvl = line([[0, 0.05], [0.4, 0.08], [2.4, 0.5], [4, 0.36], [U0 - 0.5, 0.34], [U1 + 0.1, 0.34], [U1 + 1.2, 0.44], [sec(S.s11 + 54), 0.44], [sec(S.s11 + 66), 0.8], [sec(S.s11 + 100), 0.44], [sec(S.s09), 0.55], [sec(S.s09b), 0.45], [sec(S.s09b + 150), 0.2], [END, 0.24], [DUR - 2, 0.3], [DUR, 0]]);
+  const lvl = line([[0, 0.05], [0.4, 0.08], [2.4, 0.5], [4, 0.36], [U0 - 0.5, 0.34], [U1 + 0.1, 0.34], [U1 + 1.2, 0.44], [S('s11', 54), 0.44], [S('s11', 66), 0.8], [S('s11', 100), 0.44], [S('s09'), 0.55], [S('s09b'), 0.45], [S('s09b', 150), 0.2], [END, 0.24], [DUR - 2, 0.3], [DUR, 0]]);
   const wl = band(noise(21), (t) => 380 + 520 * gust(t) + 200 * gust2(t), 0.55), wr = band(noise(22), (t) => 420 + 480 * gust(t + 0.3) + 220 * gust2(t + 0.2), 0.55);
   const hl = band(noise(23), (t) => 1700 + 1500 * gust2(t), 0.8);
   // the sea: low wash arriving in slow waves
@@ -154,7 +155,7 @@ function renderAir(out, S, night, under) {
   }
   if (!night) return;
   // crickets: three of them, each a run of quick chirps and a rest, never quite in step; they stop as the day comes
-  const fadeOut = (t) => 1 - smooth(sec(S.s10 + 110), sec(S.s10 + 200), t);
+  const fadeOut = (t) => 1 - smooth(S('s10', 110), S('s10', 200), t);
   [[4350, 0.93, -0.6, 0.011, 51], [4820, 1.17, 0.5, 0.009, 52], [3980, 1.41, 0.1, 0.007, 53]].forEach(([f, period, p, amp, seed]) => {
     const [gl, gr] = pan(p), swell = wander(seed, 0.15), w = (2 * Math.PI * f) / SR;
     for (let i = 0; i < N; i++) {
@@ -167,8 +168,8 @@ function renderAir(out, S, night, under) {
 
 function renderNotes(mel, fx, S, night) {
   const tune = night ? BOX : BELL, WOODEN = [[1, 1, 0.9], [3.9, 0.3, 0.2], [9.2, 0.08, 0.08]];
-  for (const [shot, dt, p, v] of melody(night)) { const t = sec(S[shot]) + dt; strike(mel, t, hz(p), v * (night ? 0.24 : 0.2), (hz(p) > 800 ? 0.2 : -0.15), tune); strike(mel, t + 0.003, hz(p) * 1.003, v * 0.07, -0.3, tune); }
-  const C = cues(S, night), at = sec;
+  for (const [shot, dt, p, v] of melody(night)) { const t = S.part(shot, (dt * FPS) / S.whole[shot]); strike(mel, t, hz(p), v * (night ? 0.24 : 0.2), (hz(p) > 800 ? 0.2 : -0.15), tune); strike(mel, t + 0.003, hz(p) * 1.003, v * 0.07, -0.3, tune); }
+  const C = cues(S, night), at = (seconds) => seconds;
   // the lighthouse: a low reed note, far off
   reed(fx, at(C.beam) - 0.5, hz('D3'), 2.6, 0.07, 0.3);
   // the dark boat is stopped: the horn again with a note a tritone above it, and a thud; then, when it has turned, a small release
@@ -223,12 +224,13 @@ function reverb(src, out, wet) {
   }
 }
 
-/** The whole score for a cut: the day film's, or the night film's. Ten seconds or so of work. */
-export function renderScore(night = false) {
-  const cut = night ? 'night' : 'full', S = starts(cut);
+/** The whole score for a cut. Ten seconds or so of work. */
+export function renderScore(cut = 'night') {
+  const night = cut.startsWith('night'), S = clock(cut);
+  S.whole = Object.fromEntries(CUTS[night ? 'nightSlow' : 'fullSlow'].map((e) => [e.id, e.frames]));   // each shot's length as written
   DUR = total(cut) / FPS; N = Math.round(DUR * SR);
   // how far under water the picture is: 0 on the surface, 1 below (the cuts are hard; a few ms of ramp avoids clicks)
-  const U0 = sec(S.s05), U1 = sec(S.s11), under = (t) => smooth(U0 - 0.02, U0 + 0.05, t) * (1 - smooth(U1 - 0.05, U1 + 0.02, t));
+  const U0 = S('s05'), U1 = S('s11'), under = (t) => smooth(U0 - 0.02, U0 + 0.05, t) * (1 - smooth(U1 - 0.05, U1 + 0.02, t));
   const out = bus(), pads = bus(), mel = bus(), fx = bus(), air = bus();
   renderPads(pads, S, night, under); renderAir(air, S, night, under); renderNotes(mel, fx, S, night);
   // under water the notes lose their top and gain a longer tail
