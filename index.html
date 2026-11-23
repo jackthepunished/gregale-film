@@ -1,7 +1,8 @@
 <!doctype html>
 <!--
 GREGALE: the film's dev page. Serve this folder (node serve.mjs) and open http://localhost:5177.
-  ?look=night    the night film: the same bay under a moon, two more shots, and a dawn
+  ?look=night    the night film: the same bay under a moon, ending on a dawn
+  ?pace=slow     every shot whole and at its own pace (82 s instead of 54)
   ?frame=600     the frame shown first          ?scale=0.5   half size, for a quick look
   ?render        start rendering at once        ?from=..&to=..   only these frames
   ?mbps=8        video bitrate                  ?silent      picture only
@@ -62,7 +63,8 @@ const save = (href, name) => { const a = document.createElement('a'); a.href = h
 
 let scoring;
 /** The soundtrack: { l, r } Float32Arrays at 44.1 kHz, synthesised once. */
-const score = () => (scoring ??= import('./src/sound.js').then((m) => m.renderScore(q.get('look') === 'night')));
+const cutName = (q.get('look') === 'night' ? 'night' : 'full') + (q.get('pace') === 'slow' ? 'Slow' : '');
+const score = () => (scoring ??= import('./src/sound.js').then((m) => m.renderScore(cutName)));
 function wav({ l, r }) {
   const n = l.length, out = new DataView(new ArrayBuffer(44 + n * 4)), w = (at, s) => { for (let i = 0; i < s.length; i++) out.setUint8(at + i, s.charCodeAt(i)); };
   w(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
@@ -142,7 +144,7 @@ async function start() {
   window.__fonts = { grotesk: document.fonts.check('600 40px "Familjen Grotesk"'), mono: document.fonts.check('500 30px "Spline Sans Mono"') };
   const film = createFilm(canvas, { width: Math.round(W * scale), height: Math.round(H * scale), samples: num('samples', 4), bust: q.get('bust') });
   const gl = film.k.renderer.getContext(), total = film.TOTAL;
-  const name = `gregale${q.get('look') === 'night' ? '-night' : ''}${scale === 1 ? '' : `@${scale}`}`;
+  const name = `gregale${q.get('look') === 'night' ? '-night' : ''}${q.get('pace') === 'slow' ? '-long' : ''}${scale === 1 ? '' : `@${scale}`}`;
 
   window.__film = {
     shots: film.SHOTS, total, film,

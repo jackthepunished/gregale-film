@@ -64,6 +64,7 @@ function logo(color) {
 }
 
 const INK = 'rgba(24,14,34,0.62)';
+const PANEL_SCALE = 1.2;   // the console panel, against the sizes it is drawn at below
 const KIND = { running: ['#d3fae8', '#006f40'], waking: ['#fff0c4', '#8a5a00'], sleeping: ['#eff3f1', '#55625c'], bad: ['#fde4e4', '#b42020'], preview: ['#ece4fd', '#5b21b6'], shadow: ['#e6eef6', '#35557a'], off: ['#f3f5f4', '#9aa6a0'] };
 const rr = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
 
@@ -166,6 +167,7 @@ export function overlay(k, camera) {
   const pill = (kind, label, x, y, spin, size = 21) => { const [bg, fg] = KIND[kind]; px.font = `600 ${size}px ${FONT}`; const w = px.measureText(label).width + 56; rr(px, x, y, w, 38, 19); px.fillStyle = bg; px.fill(); dot(kind, x + 21, y + 19, spin, fg); text(px, label, x + 39, y + 26, { size, weight: 600, color: fg, shadow: 0 }); return w; };
   function drawPanel(p, spin, a) {
     px.clearRect(0, 0, 1920, 1080); px.globalAlpha = a;
+    px.save(); px.translate(72, 56); px.scale(PANEL_SCALE, PANEL_SCALE); px.translate(-72, -56);   // about its top left corner
     const x = 72, y = 56, pad = 24; px.font = `600 21px ${FONT}`;
     const chipsW = (p.chips ?? []).reduce((s, [, t]) => s + px.measureText(t).width + 56 + 10, 0) - 10, badgeW = p.badge ? px.measureText(p.badge[1]).width + 56 : 0;
     px.font = `600 32px ${FONT}`; const titleW = px.measureText(p.title).width; px.font = `400 19px ${MONO}`; const subW = px.measureText(p.sub ?? '').width;
@@ -186,7 +188,7 @@ export function overlay(k, camera) {
       rr(px, bx, by, Math.max(14, bw * Math.min(p.bar.value, p.bar.cap)), 14, 7); px.fillStyle = '#00ce91'; px.fill();
       px.fillStyle = '#0d1512'; px.fillRect(bx + bw * p.bar.cap - 1.5, by - 7, 3, 28);
     }
-    px.globalAlpha = 1;
+    px.restore(); px.globalAlpha = 1;
   }
 
   return {

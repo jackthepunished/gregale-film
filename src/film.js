@@ -3,10 +3,10 @@
 // `f` is the frame inside the shot. build() runs once; update() must be a pure function of f.
 // (The loader is The Tide Keeper's, MIT, Copyright (c) 2026 Reason Machines; see NOTICE.md.)
 import { createEngine } from './engine/engine.js';
-import { CUTS, total, shotAt } from './timeline.js';
+import { CUTS, SLOW, total, shotAt } from './timeline.js';
 import { NIGHT, LIGHT } from './kit/look.js';
 
-const CUT = NIGHT ? 'night' : 'full', SHOTS = CUTS[CUT], TOTAL = total(CUT);
+const CUT = (NIGHT ? 'night' : 'full') + (SLOW ? 'Slow' : ''), SHOTS = CUTS[CUT], TOTAL = total(CUT);
 
 export const W = 1920, H = 1080, FPS = 24;
 
@@ -43,7 +43,7 @@ export function createFilm(canvas, opts = {}) {
     let fade = 1;
     if (entry.fadeIn) fade *= k.smooth(0, entry.fadeIn, i);
     if (entry.fadeOut) fade *= 1 - k.smooth(entry.fadeOut[0], entry.fadeOut[1], i);
-    await renderShot(entry.id, entry.from + i, entry.opts, fade);
+    await renderShot(entry.id, entry.from + i * (entry.speed ?? 1), entry.opts, fade);   // the cut may run a shot faster than it was written
   }
   async function renderFrame(frame, cut = CUT) {
     const s = shotAt(frame, cut);

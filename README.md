@@ -1,9 +1,9 @@
 # Gregale: the film
 
 A film (24 fps, 1920x1080) about what Gregale does for an app, told as a visit to a harbour. It comes in two looks
-with the same shots: by day (1956 frames, 81.5 s) and by night (1980 frames, 82.5 s, ending on a dawn). The picture
-is drawn by code (three.js and GLSL) and the score is synthesised by code. The only assets are the logo,
-`assets/gregale-logo.png`, and the two typefaces in `assets/fonts/`.
+with the same shots: by day (53 s) and by night (54 s, ending on a dawn). The picture is drawn by code (three.js and
+GLSL) and the score is synthesised by code. The only assets are the logo, `assets/gregale-logo.png`, and the two
+typefaces in `assets/fonts/`.
 
 ## Run it
 
@@ -17,6 +17,17 @@ H.264 and AAC with the browser's own encoders, and saves `gregale.mp4`. Options 
 
 Add `?look=night` for the night film: http://localhost:5177/?look=night. It saves `gregale-night.mp4`.
 
+## The pace
+
+Each shot is written at an easy pace, and the edit (`src/timeline.js`) decides how briskly it goes by: the film plays
+most shots at about one and a half times their own speed and trims the slack off the front of two of them. The score
+asks the edit when each thing happens, so its cues stay on their pictures at any speed.
+
+Add `?pace=slow` for every shot whole and at its own pace (82.5 s by night, 81.5 s by day). It saves
+`gregale-night-long.mp4` or `gregale-long.mp4`. To change the pace of one shot, change its speed in `BRISK`.
+
+`node tools/score.mjs night` writes the score for a cut as a WAV without a browser.
+
 ## The story
 
 The gregale is the north-east wind of the Mediterranean. In the film it carries a visitor, the lantern boat, into a
@@ -25,7 +36,7 @@ harbour where every raft is an app and a raft's lantern is lit while the app is 
 It is told in plain sentences, one a shot. The technical name of what a shot shows is the small label above its
 sentence. The console's panel, top left, shows the same thing as the product shows it.
 
-| Shot | Frames | Label | On screen | What happens | Panel |
+| Shot | Frames as written | Label | On screen | What happens | Panel |
 |---|---|---|---|---|---|
 | s01 | 96 | | Gregale is a wind. It carries people to your app. | Open sea. The wind arrives; far out, the boat runs before it. | |
 | s02 | 96 | | | The boat, close. | |
