@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "gregale-film", "runtimeExecutable": "node", "runtimeArgs": ["serve.mjs", "5177"], "port": 5177 }
+  ]
+}

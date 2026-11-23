@@ -1,0 +1,220 @@
+<!doctype html>
+<!--
+GREGALE: the film's dev page. Serve this folder (node serve.mjs) and open http://localhost:5177.
+  ?look=night    the night film: the same bay under a moon, two more shots, and a dawn
+  ?frame=600     the frame shown first          ?scale=0.5   half size, for a quick look
+  ?render        start rendering at once        ?from=..&to=..   only these frames
+  ?mbps=8        video bitrate                  ?silent      picture only
+From a script: await __film.render(shot, i) -> { url }, __film.mp4(options), __film.score() -> WAV bytes.
+-->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gregale: the film</title>
+<script type="importmap">{ "imports": { "three": "./vendor/three.js", "three/addons/utils/BufferGeometryUtils.js": "./vendor/three.js", "three/addons/geometries/RoundedBoxGeometry.js": "./vendor/three.js", "mp4-muxer": "./vendor/mp4-muxer.js" } }</script>
+<style>
+/* The film's typefaces, the ones gregale.dev uses (SIL Open Font License; see NOTICE.md). The files in assets/fonts are used, not installed copies, so every machine draws the same letters. */
+@font-face { font-family: "Familjen Grotesk"; src: url("assets/fonts/FamiljenGrotesk.ttf") format("truetype"); font-weight: 400 700; font-display: block; }
+@font-face { font-family: "Spline Sans Mono"; src: url("assets/fonts/SplineSansMono.ttf") format("truetype"); font-weight: 300 700; font-display: block; }
+:root { color-scheme: dark; --ink: #e9f2ec; --dim: #8fa39a; --night: #06100d; --mint: #00ce91; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--night); color: var(--ink); font: 14px/1.4 "Familjen Grotesk", ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+body { display: grid; grid-template-rows: 1fr auto; }
+main { min-height: 0; display: grid; place-items: center; background: #000; }
+main > * { width: min(100vw, calc((100vh - 5.5rem) * 16 / 9)); height: auto; aspect-ratio: 16 / 9; display: block; }
+main > [hidden] { display: none; }
+footer { padding: .6rem .9rem .7rem; display: grid; gap: .45rem; }
+.row { display: flex; align-items: center; gap: .7rem; }
+h1 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; }
+input[type=range] { flex: 1; min-width: 6rem; accent-color: var(--mint); }
+button { font: inherit; color: var(--ink); background: none; border: 1px solid #2c3d36; border-radius: 6px; padding: .3rem .75rem; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--mint); }
+button:disabled { opacity: .45; cursor: default; }
+#render { background: var(--mint); border-color: var(--mint); color: #00301c; font-weight: 600; }
+#at, #status { color: var(--dim); font-variant-numeric: tabular-nums; }
+#at { white-space: nowrap; min-width: 17rem; text-align: right; }
+#status { min-height: 1.4em; }
+#status a { color: var(--mint); }
+:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+</style>
+<main><canvas id="c" width="1920" height="1080"></canvas><video id="movie" controls hidden></video></main>
+<footer>
+  <div class="row"><h1>Gregale</h1><input id="frame" type="range" min="0" max="1319" value="0" aria-label="Frame"><span id="at"></span></div>
+  <div class="row"><button id="render">Render MP4</button><button id="play">Play</button><button id="still">Save frame</button><button id="wav">Save score</button><span id="status" role="status">Loading...</span></div>
+</footer>
+<script type="module">
+// The page: draws frames, scrubs, and renders the film to an MP4 with the browser's own encoders (WebCodecs).
+// (The MP4 path follows The Tide Keeper of San Francisco's page, MIT, Copyright (c) 2026 Reason Machines; see NOTICE.md.)
+import { createFilm, W, H, FPS } from './src/film.js';
+
+const SR = 44100;
+const q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id);
+const num = (key, fallback) => (q.get(key) && Number.isFinite(Number(q.get(key))) ? Number(q.get(key)) : fallback);
+const scale = num('scale', 1);
+const errors = [];
+addEventListener('error', (e) => errors.push(String(e.message)));
+addEventListener('unhandledrejection', (e) => errors.push(String(e.reason?.stack || e.reason)));
+window.__err = errors;
+const say = (text) => { $('status').textContent = text; };
+// yields to the page without a timer: timers are slowed to one a second in a tab that is not in front
+const tick = () => new Promise((done) => { const c = new MessageChannel(); c.port1.onmessage = done; c.port2.postMessage(0); });
+const save = (href, name) => { const a = document.createElement('a'); a.href = href; a.download = name; document.body.append(a); a.click(); a.remove(); };
+
+let scoring;
+/** The soundtrack: { l, r } Float32Arrays at 44.1 kHz, synthesised once. */
+const score = () => (scoring ??= import('./src/sound.js').then((m) => m.renderScore(q.get('look') === 'night')));
+function wav({ l, r }) {
+  const n = l.length, out = new DataView(new ArrayBuffer(44 + n * 4)), w = (at, s) => { for (let i = 0; i < s.length; i++) out.setUint8(at + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
+  out.setUint32(24, SR, true); out.setUint32(28, SR * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) { out.setInt16(44 + i * 4, Math.round(Math.max(-1, Math.min(1, l[i])) * 32767), true); out.setInt16(46 + i * 4, Math.round(Math.max(-1, Math.min(1, r[i])) * 32767), true); }
+  return new Uint8Array(out.buffer);
+}
+const resample = (x, from, to) => { const out = new Float32Array(Math.round((x.length * to) / from)); for (let i = 0; i < out.length; i++) { const p = (i * from) / to, a = Math.floor(p), t = p - a; out[i] = x[a] * (1 - t) + (x[Math.min(a + 1, x.length - 1)] ?? 0) * t; } return out; };
+
+async function firstSupported(Encoder, list) {
+  for (const c of list) { try { if ((await Encoder.isConfigSupported(c.config)).supported) return c; } catch {} }
+  return null;
+}
+async function renderMp4(film, canvas, { from = 0, to = film.TOTAL - 1, mbps, sound = true, progress = () => {} } = {}) {
+  if (!('VideoEncoder' in window)) throw new Error('This browser has no video encoder (WebCodecs). Use Chrome or Edge.');
+  const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
+  const gl = film.k.renderer.getContext(), width = canvas.width, height = canvas.height;
+  const bitrate = Math.round((mbps ?? 10 * Math.max(0.15, (width * height) / (W * H))) * 1e6);
+  const video = await firstSupported(VideoEncoder, [
+    ['avc', 'avc1.640028', { avc: { format: 'avc' } }], ['avc', 'avc1.4d0028', { avc: { format: 'avc' } }], ['avc', 'avc1.42e028', { avc: { format: 'avc' } }],
+    ['vp9', 'vp09.00.40.08', {}], ['av1', 'av01.0.08M.08', {}],
+  ].map(([mux, codec, more]) => ({ mux, config: { codec, width, height, bitrate, framerate: FPS, latencyMode: 'quality', ...more } })));
+  if (!video) throw new Error('This browser cannot encode H.264, VP9 or AV1 at this size.');
+  const audio = sound && 'AudioEncoder' in window ? await firstSupported(AudioEncoder, [
+    { mux: 'aac', config: { codec: 'mp4a.40.2', sampleRate: SR, numberOfChannels: 2, bitrate: 192000 } },
+    { mux: 'opus', config: { codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 160000 } },
+  ]) : null;
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(), fastStart: 'in-memory', firstTimestampBehavior: 'offset',
+    video: { codec: video.mux, width, height, frameRate: FPS },
+    ...(audio ? { audio: { codec: audio.mux, numberOfChannels: 2, sampleRate: audio.config.sampleRate } } : {}),
+  });
+  let failed = null;
+  const venc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => { failed = e; } });
+  venc.configure(video.config);
+  const t0 = performance.now(), count = to - from + 1;
+  for (let f = from; f <= to; f++) {
+    const shot = await film.renderFrame(f);
+    gl.finish();
+    if (errors.length) throw new Error(errors.splice(0).join('\n'));
+    const picture = new VideoFrame(canvas, { timestamp: Math.round(((f - from) * 1e6) / FPS), duration: Math.round(1e6 / FPS), alpha: 'discard' });
+    venc.encode(picture, { keyFrame: f === from || f === shot.start || (f - shot.start) % 48 === 0 });
+    picture.close();
+    while (venc.encodeQueueSize > 2 && !failed) await tick();
+    if (failed) throw failed;
+    progress({ done: f - from + 1, count, frame: f, shot: shot.id, seconds: (performance.now() - t0) / 1000 });
+    await tick();
+  }
+  await venc.flush(); venc.close();
+  if (audio) {
+    progress({ done: count, count, note: 'the score' });
+    await tick();
+    let { l, r } = await score();
+    const a = Math.round((from / FPS) * SR), b = Math.round(((to + 1) / FPS) * SR), rate = audio.config.sampleRate;
+    l = l.subarray(a, b); r = r.subarray(a, b);
+    if (rate !== SR) { l = resample(l, SR, rate); r = resample(r, SR, rate); }
+    const aenc = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (e) => { failed = e; } });
+    aenc.configure(audio.config);
+    for (let i = 0, STEP = 4096; i < l.length; i += STEP) {
+      const n = Math.min(STEP, l.length - i), data = new Float32Array(n * 2);
+      data.set(l.subarray(i, i + n), 0); data.set(r.subarray(i, i + n), n);
+      const piece = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i * 1e6) / rate), data });
+      aenc.encode(piece); piece.close();
+      if (aenc.encodeQueueSize > 16) await tick();
+    }
+    await aenc.flush(); aenc.close();
+    if (failed) throw failed;
+  }
+  muxer.finalize();
+  return { blob: new Blob([muxer.target.buffer], { type: 'video/mp4' }), video: video.config.codec, audio: audio?.config.codec ?? null, frames: count, seconds: (performance.now() - t0) / 1000 };
+}
+
+async function start() {
+  const canvas = $('c'), movie = $('movie'), bar = $('frame'), go = $('render'), label = $('at');
+  // the words are drawn on canvases when a shot is built: the typefaces must be in before that
+  await Promise.all(['400 40px "Familjen Grotesk"', '600 40px "Familjen Grotesk"', '400 30px "Spline Sans Mono"', '600 30px "Spline Sans Mono"'].map((f) => document.fonts.load(f).catch(() => {})));
+  window.__fonts = { grotesk: document.fonts.check('600 40px "Familjen Grotesk"'), mono: document.fonts.check('500 30px "Spline Sans Mono"') };
+  const film = createFilm(canvas, { width: Math.round(W * scale), height: Math.round(H * scale), samples: num('samples', 4), bust: q.get('bust') });
+  const gl = film.k.renderer.getContext(), total = film.TOTAL;
+  const name = `gregale${q.get('look') === 'night' ? '-night' : ''}${scale === 1 ? '' : `@${scale}`}`;
+
+  window.__film = {
+    shots: film.SHOTS, total, film,
+    async render(entry, i, type = 'image/jpeg', quality = 0.96) {
+      const t0 = performance.now();
+      await film.renderEntry(entry, i);
+      gl.finish();
+      return { url: canvas.toDataURL(type, quality), ms: performance.now() - t0, err: errors.splice(0), glErr: gl.getError() };
+    },
+    /** Draw film frame f and return any errors: for checking a frame from the console. */
+    async show(f) { const s = await film.renderFrame(f); gl.finish(); shown = wanted = f; bar.value = String(f); label.textContent = `frame ${f} of ${total}, ${(f / FPS).toFixed(2)} s, shot ${s.id.slice(1)}`; return { shot: s.id, err: errors.splice(0), glErr: gl.getError() }; },
+    mp4: (options) => renderMp4(film, canvas, options),
+    score: async () => wav(await score()),
+  };
+
+  let wanted = Math.min(total - 1, Math.max(0, num('frame', 0))), shown = -1, drawing = false, busy = false, playing = false;
+  async function draw() {
+    if (drawing || busy) return;
+    drawing = true;
+    while (shown !== wanted && !busy) {
+      const f = wanted, shot = await film.renderFrame(f);
+      shown = f;
+      label.textContent = `frame ${f} of ${total}, ${(f / FPS).toFixed(2)} s, shot ${shot.id.slice(1)}`;
+      if (errors.length) say(errors.splice(0).join(' | '));
+      await tick();
+    }
+    drawing = false;
+  }
+  bar.max = String(total - 1); bar.value = String(wanted);
+  bar.addEventListener('input', () => { movie.hidden = true; canvas.hidden = false; wanted = Number(bar.value); draw(); });
+  $('still').addEventListener('click', async () => { if (busy) return; await draw(); await film.renderFrame(shown); gl.finish(); save(canvas.toDataURL('image/png'), `${name}_f${String(shown).padStart(4, '0')}.png`); });
+  $('wav').addEventListener('click', async () => { say('Synthesising the score...'); await tick(); const href = URL.createObjectURL(new Blob([wav(await score())], { type: 'audio/wav' })); save(href, 'gregale-score.wav'); say('Score saved.'); });
+  // Play: a rough preview at whatever speed the machine draws, with no sound (render the MP4 for the real thing)
+  $('play').addEventListener('click', async () => {
+    if (busy) return; playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play';
+    const t0 = performance.now(), f0 = shown < 0 ? 0 : shown;
+    while (playing && !busy) { const f = f0 + Math.floor(((performance.now() - t0) / 1000) * FPS); if (f >= total) break; wanted = f; bar.value = String(f); await draw(); await new Promise(requestAnimationFrame); }
+    playing = false; $('play').textContent = 'Play';
+  });
+
+  async function render() {
+    if (busy) return;
+    playing = false; busy = true; go.disabled = bar.disabled = true; movie.hidden = true; canvas.hidden = false;
+    while (drawing) await tick();
+    try {
+      const from = Math.max(0, num('from', 0)), to = Math.min(total - 1, num('to', total - 1));
+      const result = await renderMp4(film, canvas, {
+        from, to, mbps: num('mbps', undefined), sound: !q.has('silent'),
+        progress: ({ done, count, shot, seconds, note }) => {
+          if (note) return say(`Picture done. Now ${note}...`);
+          const left = (seconds / done) * (count - done);
+          say(`Rendering: frame ${done} of ${count} (shot ${shot.slice(1)}), ${(done / seconds).toFixed(1)} frames a second, about ${left > 90 ? `${Math.round(left / 60)} min` : `${Math.ceil(left)} s`} left. Keep this tab in front.`);
+          bar.value = String(from + done - 1);
+        },
+      });
+      const href = URL.createObjectURL(result.blob), file = `${name}.mp4`;
+      window.__mp4 = result;
+      movie.src = href; movie.hidden = false; canvas.hidden = true;
+      say(`Done: ${result.frames} frames in ${Math.round(result.seconds)} s, ${(result.blob.size / 1e6).toFixed(1)} MB (${result.video}${result.audio ? ` + ${result.audio}` : ', no sound'}). `);
+      const a = document.createElement('a'); a.href = href; a.download = file; a.textContent = `Save ${file}`; $('status').append(a);
+      if (!q.has('keep')) save(href, file);
+    } catch (e) {
+      window.__mp4 = { error: String(e?.stack || e) };
+      say(`Could not render: ${e?.message || e}`);
+    }
+    busy = false; go.disabled = bar.disabled = false; shown = -1;
+  }
+  go.addEventListener('click', render);
+  say(scale === 1 ? '' : `Drawing at ${scale} of full size (${canvas.width}x${canvas.height}).`);
+  window.__ready = true;
+  if (q.has('render')) await render(); else await draw();
+}
+start().catch((e) => { errors.push(String(e?.stack || e)); window.__ready = 'failed'; say(`Could not start: ${e?.message || e}`); });
+</script>
+</html>
